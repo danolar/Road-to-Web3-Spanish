@@ -11,9 +11,9 @@ Bienvenid@ a #RoadToWeb3, un programa de 10 semanas de desarrollo en blockchain 
 El activo de prueba de conocimiento (PoK) es respaldado por Alchemy y es reconocido por los socios que contribuyen a los retos de aprendizaje semanales. 
 Podrás usar tu Prueba de conocimiento (PoK) para demostrar tus habilidades, ganar premios y construir una reputación en la comunidad!
 
-## Desafíos de aprendizaje de la ruta hacia Web3
+## Desafíos de aprendizaje del camino hacia Web3
 
-Aquí encontraras los links de cada uno de los desafíos de la ruta hacia web 3.
+Aquí encontraras los links de cada uno de los desafíos del camino hacia web 3.
 
 1. Como crear el contrato inteligente de un NFT (ERC721) con Alchemy
 2. Como construir una Aplicación de finanzas descentralizadas (DeFi dApp) "Regálame un café"

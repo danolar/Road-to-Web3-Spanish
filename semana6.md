@@ -341,3 +341,216 @@ También establecemos nuestra marca de tiempo de depósito con la hora actual de
 En nuestra función de retiro, usamos nuevamente los modificadores creados anteriormente pero esta vez queremos que ``withdrawalDeadlineReached()`` sea true y ``claimDeadlineReached()`` sea false.
 
 Este conjunto de modificadores/parámetros significa que estamos en el punto óptimo para la ventana de retirada, ya que es el momento para que la retirada tenga lugar sin ninguna penalización y además obtenemos intereses.
+
+
+
+```
+  /*
+  Withdraw function for a user to remove their staked ETH inclusive
+  of both the principle balance and any accrued interest
+  */
+  
+  function withdraw() public withdrawalDeadlineReached(true) claimDeadlineReached(false) notCompleted{
+    require(balances[msg.sender] > 0, "You have no balance to withdraw!");
+    uint256 individualBalance = balances[msg.sender];
+    uint256 indBalanceRewards = individualBalance + ((block.timestamp-depositTimestamps[msg.sender])*rewardRatePerSecond);
+    balances[msg.sender] = 0;
+
+    // Transfer all ETH via call! (not transfer) cc: https://solidity-by-example.org/sending-ether
+    (bool sent, bytes memory data) = msg.sender.call{value: indBalanceRewards}("");
+    require(sent, "RIP; withdrawal failed :( ");
+  }
+  
+```
+
+El resto de la función realiza algunos pasos importantes.
+
+1. Comprueba que la persona que intenta retirar ETH realmente tiene una apuesta distinta de cero.
+2. Calcula la cantidad de ETH adeudada en concepto de intereses tomando el número de segundos transcurridos desde el depósito hasta la retirada y multiplicándolo por nuestra constante de interés.
+3. Establece el saldo de ETH depositado por el usuario en 0 para que no pueda producirse una doble contabilidad.
+4. Transfiere el ETH del contrato inteligente de vuelta a la cartera del usuario.
+
+
+### Ejecutar la función de distribución
+
+Aquí, queremos que ``claimDeadlineReached()`` sea true ya que la distribución de fondos improductivos sólo puede ocurrir después de la marca de 4 minutos.
+
+Del mismo modo, queremos que ``notCompleted`` sea true ya que esta dApp sólo está diseñada para un único uso.
+
+```
+    /*
+  Allows any user to repatriate "unproductive" funds that are left in the staking contract
+  past the defined withdrawal period
+  */
+  
+  function execute() public claimDeadlineReached(true) notCompleted {
+    uint256 contractBalance = address(this).balance;
+    exampleExternalContract.complete{value: address(this).balance}();
+  }
+```
+
+El resto de funciones:
+
+1. Toma el saldo actual de ETH en el contrato ``Staker``
+2. Envía el ETH al ``exampleExternalContract`` de la repo
+
+Si has seguido en Solidity hasta ahora, tu ``Staker.sol`` debería tener el siguiente aspecto:
+
+**``Staker.sol``**
+
+```
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.4;
+
+import "hardhat/console.sol";
+import "./ExampleExternalContract.sol";
+
+contract Staker {
+
+  ExampleExternalContract public exampleExternalContract;
+
+  mapping(address => uint256) public balances;
+  mapping(address => uint256) public depositTimestamps;
+
+  uint256 public constant rewardRatePerSecond = 0.1 ether;
+  uint256 public withdrawalDeadline = block.timestamp + 120 seconds;
+  uint256 public claimDeadline = block.timestamp + 240 seconds;
+  uint256 public currentBlock = 0;
+
+  // Events
+  event Stake(address indexed sender, uint256 amount);
+  event Received(address, uint);
+  event Execute(address indexed sender, uint256 amount);
+
+  // Modifiers
+  /*
+  Checks if the withdrawal period has been reached or not
+  */
+  modifier withdrawalDeadlineReached( bool requireReached ) {
+    uint256 timeRemaining = withdrawalTimeLeft();
+    if( requireReached ) {
+      require(timeRemaining == 0, "Withdrawal period is not reached yet");
+    } else {
+      require(timeRemaining > 0, "Withdrawal period has been reached");
+    }
+    _;
+  }
+
+  /*
+  Checks if the claim period has ended or not
+  */
+  modifier claimDeadlineReached( bool requireReached ) {
+    uint256 timeRemaining = claimPeriodLeft();
+    if( requireReached ) {
+      require(timeRemaining == 0, "Claim deadline is not reached yet");
+    } else {
+      require(timeRemaining > 0, "Claim deadline has been reached");
+    }
+    _;
+  }
+
+  /*
+  Requires that the contract only be completed once!
+  */
+  modifier notCompleted() {
+    bool completed = exampleExternalContract.completed();
+    require(!completed, "Stake already completed!");
+    _;
+  }
+
+  constructor(address exampleExternalContractAddress){
+      exampleExternalContract = ExampleExternalContract(exampleExternalContractAddress);
+  }
+
+  // Stake function for a user to stake ETH in our contract
+  function stake() public payable withdrawalDeadlineReached(false) claimDeadlineReached(false){
+    balances[msg.sender] = balances[msg.sender] + msg.value;
+    depositTimestamps[msg.sender] = block.timestamp;
+    emit Stake(msg.sender, msg.value);
+  }
+
+  /*
+  Withdraw function for a user to remove their staked ETH inclusive
+  of both principal and any accrued interest
+  */
+  function withdraw() public withdrawalDeadlineReached(true) claimDeadlineReached(false) notCompleted{
+    require(balances[msg.sender] > 0, "You have no balance to withdraw!");
+    uint256 individualBalance = balances[msg.sender];
+    uint256 indBalanceRewards = individualBalance + ((block.timestamp-depositTimestamps[msg.sender])*rewardRatePerSecond);
+    balances[msg.sender] = 0;
+
+    // Transfer all ETH via call! (not transfer) cc: https://solidity-by-example.org/sending-ether
+    (bool sent, bytes memory data) = msg.sender.call{value: indBalanceRewards}("");
+    require(sent, "RIP; withdrawal failed :( ");
+  }
+
+  /*
+  Allows any user to repatriate "unproductive" funds that are left in the staking contract
+  past the defined withdrawal period
+  */
+  function execute() public claimDeadlineReached(true) notCompleted {
+    uint256 contractBalance = address(this).balance;
+    exampleExternalContract.complete{value: address(this).balance}();
+  }
+
+  /*
+  READ-ONLY function to calculate the time remaining before the minimum staking period has passed
+  */
+  function withdrawalTimeLeft() public view returns (uint256 withdrawalTimeLeft) {
+    if( block.timestamp >= withdrawalDeadline) {
+      return (0);
+    } else {
+      return (withdrawalDeadline - block.timestamp);
+    }
+  }
+
+  /*
+  READ-ONLY function to calculate the time remaining before the minimum staking period has passed
+  */
+  function claimPeriodLeft() public view returns (uint256 claimPeriodLeft) {
+    if( block.timestamp >= claimDeadline) {
+      return (0);
+    } else {
+      return (claimDeadline - block.timestamp);
+    }
+  }
+
+  /*
+  Time to "kill-time" on our local testnet
+  */
+  function killTime() public {
+    currentBlock = block.timestamp;
+  }
+
+  /*
+  \Function for our smart contract to receive ETH
+  cc: https://docs.soliditylang.org/en/latest/contracts.html#receive-ether-function
+  */
+  receive() external payable {
+      emit Received(msg.sender, msg.value);
+  }
+
+}
+
+```
+
+
+## 5. Incursión en el Frontend
+
+¡Impresionante! Acabamos de pasar por un montón de Solidity. Cuando se trata de pantallas frontend, Scaffold-Eth trata de mantener las cosas agradables y simples. ¡Contiene un montón de diferentes componentes react que dan a los usuarios soluciones de bajo código para UIs impresionantes! Te animo a jugar con los diferentes componentes disponibles para ti, pero, mientras tanto, vamos a aprender más en el lado del guerrero.
+
+Mirando nuestro archivo ``App.jsx``, específicamente en [el bloque de código alrededor del enlace 573](https://github.com/scaffold-eth/scaffold-eth/blob/challenge-1-decentralized-staking/packages/react-app/src/App.jsx#L573), vemos un bloque de código utilizado para capturar eventos emitidos desde nuestros contratos Solidity y mostrarlos como una lista.
+
+Efectivamente, nos permite registrar las diferentes acciones iniciadas desde nuestros contratos inteligentes, analizar la información almacenada, y luego permitir visualmente a los usuarios de la dApp ver su historial en la cadena.
+
+Si bien vamos a practicar las buenas practicas de programación mediante la emisión de eventos en nuestro contrato Solidity, esta vez, vamos a ignorar los eventos en nuestro frontend para simplificar, así que vamos a eliminar ese bloque de código por completo.
+
+Si miras en tu pestaña ``Staker UI``, notarás que la caja de eventos ha sido borrada.
+
+### Modificaciones del frontend
+
+En su mayor parte, gran parte del código de la interfaz seguirá siendo el mismo que el predeterminado. En el paso anterior, ya hemos eliminado el componente react de eventos.
+
+Nuestro objetivo final será tener una interfaz de usuario agradable y sencilla que se parezca a la siguiente:
+
+![](https://files.readme.io/5ff7eec-apy.png)

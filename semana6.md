@@ -1360,4 +1360,3 @@ Una vez que hayas terminado con el desafío, tuitea sobre él etiquetando a [@Al
 ADEMÁS, canjea tu desafío por una Prueba de Conocimiento NFT enviando este formulario aquí: https://forms.gle/uYhMS3brabNg3RVs7
 
 Paz y amor. ¡Feliz desarrollo! 🏗️🚀
-![image](https://user-images.githubusercontent.com/48574383/231923343-dd909d2c-960b-4ae5-aa65-3308d9c5297b.png)
